@@ -17,7 +17,32 @@ function result = solve_sdpm_quasisteady(cfg, bodyState)
 %           bodyState.u
 %           bodyState.w
 %           bodyState.omega
+%% ========================================================================
+%  0) PERSISTENT UNSTEADY STATE
+% =========================================================================
 
+% These variables contain aerodynamic information carried from the
+% previous timestep.
+
+if ~isfield(state,'time')
+    state.time = 0;
+end
+
+% wake properties from previous time step
+if ~isfield(state,'wake')
+    state.wake.Bp = []; % wake panel boundary points from previous timestep
+    state.wake.mu = []; % wake panel strengths from previous timestep
+end
+
+% bound vorticity from previous timestep
+if ~isfield(state,'GammaBoundPrev')
+    state.GammaBoundPrev = [];
+end
+
+% panel potentials (evaluated per collocation method) from previous time step
+if ~isfield(state,'phiPrev')
+    state.phiPrev = [];
+end
 
 %% ========================================================================
 %  1) FLOW
@@ -105,9 +130,11 @@ inflBB = body_influence(body);
 
 inflBW = wake_influence( ...
     body, ...
-    wake);
+    wake.panels);
 
-
+phiWake = inflBW.A   * wake.mu;
+VtWake  = inflBW.BtJ * wake.mu;
+VnWake  = inflBW.BnJ * wake.mu;
 %% ========================================================================
 %  9) ASSEMBLE AND SOLVE
 % =========================================================================
