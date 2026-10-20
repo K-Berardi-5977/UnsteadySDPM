@@ -1,4 +1,4 @@
-function result = solve_sdpm_quasisteady(cfg, bodyState)
+function [result, state] = solve_sdpm_unsteady(cfg, bodyState, state, dt)
 %SOLVE_SDPM_QUASISTEADY
 % Solve one instantaneous quasi-steady moving-body SDPM state.
 %
@@ -98,18 +98,19 @@ Vbody = body_velocity( ...
 
 
 %% ========================================================================
-%  6) BUILD CURRENT QUASI-STEADY WAKE
+%  6) LOAD PERSISTENT WAKE
 % =========================================================================
+wakeOld =  state.wake
 
-wakeCfg = cfg.wake;
-
-wakeCfg.length = ...
-    wakeCfg.lengthChord .* cfg.airfoil.chord;
-
-wake = build_steady_wake( ...
-    body, ...
-    flow, ...
-    wakeCfg);
+% wakeCfg = cfg.wake;
+% 
+% wakeCfg.length = ...
+%     wakeCfg.lengthChord .* cfg.airfoil.chord;
+% 
+% wake = build_steady_wake( ...
+%     body, ...
+%     flow, ...
+%     wakeCfg);
 
 
 %% ========================================================================
@@ -126,43 +127,110 @@ sigma = source_strengths( ...
 %  8) INFLUENCE COEFFICIENTS
 % =========================================================================
 
+
+
 inflBB = body_influence(body);
 
-inflBW = wake_influence( ...
-    body, ...
-    wake.panels);
+% Influence from OLD persistent wake
 
-phiWake = inflBW.A   * wake.mu;
-VtWake  = inflBW.BtJ * wake.mu;
-VnWake  = inflBW.BnJ * wake.mu;
+if ~isempty(wakeOld.mu)
+
+    wakeOld.panels = panel_geometry(wakeOld.Bp);
+
+    inflBWold = wake_influence(body,wakeOld.panels);
+
+    phiWakeOld = inflBWold.A * wakeOld.mu;
+
+else
+
+    phiWakeOld = zeros(body.nPanels,1);
+    VtWakeOld  = zeros(body.nPanels,1);
+    VnWakeOld  = zeros(body.nPanels,1);
+
+end
+
+
+% ---------------------------------------------------------
+% Construct geometry of ONE candidate new TE wake panel
+% ---------------------------------------------------------
+
+newWakePanel = build_new_wake_panel(body,flow, wakeOld, dt);
+
+inflBWnew = wake_influence(body,newWakePanel);
+
+
+
 %% ========================================================================
 %  9) ASSEMBLE AND SOLVE
 % =========================================================================
 
-[A,b] = assemble_dirichlet_system( ...
+[A,b] = assemble_dirichlet_system_unsteady( ...
     inflBB, ...
-    inflBW, ...
-    sigma);
+    inflBWnew, ...
+    sigma, ...
+    phiWakeOld);
 
-mu = A \ b;
+muSolve = A \ b;
 
+muBody = muSolve(1:n);
+muNew  = muSolve(end);
 
 %% ========================================================================
-%  10) POSTPROCESS
+%  10) COMPLETE CURRENT WAKE CONTRIBUTIONS
+% =========================================================================
+phiWakeNew = inflBWnew.A * muNew;
+VtWakeNew = inflBWnew.BtJ * muNew;
+VnWakeNew = inflBWnew.BnJ * muNew;
+
+phiWake = phiWakeOld + phiWakeNew;
+VtWake = VtWakeOld + VtWakeNew;
+VnWake = VnWakeOld + VnWakeNew;
+
+%% ========================================================================
+%  11) CURRENT BODY SURFACE POTENTIAL
+% =========================================================================
+
+phiDoublet = inflBB.A * muBody;
+
+phiSource = inflBB.SourceInfluence * sigma;
+
+phiBody = phiDoublet ...
+  + phiSource ...
+  + phiWake;
+
+%% ========================================================================
+%  12) APPEND NEW WAKE PANEL
+% =========================================================================
+wake = shed_wake(...
+    wakeOld, ...
+    newWakePanel, ...
+    muNew);
+
+%% ========================================================================
+%  13) POSTPROCESS
 % =========================================================================
 
 aero = postprocess_aero( ...
     body, ...
-    mu, ...
+    muBody, ...
     sigma, ...
     inflBB, ...
-    inflBW, ...
+    VtWake, ...
     flow, ...
     cfg);
 
 
 %% ========================================================================
-%  11) PACKAGE RESULTS
+%  14) UPDATE PERSISTENT STATE
+% =========================================================================
+
+state.wake = wake;
+state.GammaBoundPrev = aero.Gamma;
+
+state.phiPrev = phiBody;
+
+%% ========================================================================
+%  15) PACKAGE RESULTS
 % =========================================================================
 
 result.cfg = cfg;
@@ -181,7 +249,9 @@ result.wake = wake;
 
 result.sigma = sigma;
 
-result.mu = mu;
+result.mu = muSolve;
+result.muBody = muBody;
+result.muNew = muNew;
 
 result.system.A = A;
 
@@ -190,9 +260,7 @@ result.system.b = b;
 result.aero = aero;
 
 result.Cp = aero.Cp;
-
 result.Vt = aero.Vt;
-
 result.Gamma = aero.Gamma;
 
 result.CL_gamma = aero.CL_gamma;

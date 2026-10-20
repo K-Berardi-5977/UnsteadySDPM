@@ -139,7 +139,7 @@ for n = 1:Nt
     %% ----- Instantaneous aerodynamic solution -----
 
     results{n} = ...
-        solve_sdpm_quasisteady(cfg, stateNow);
+        solve_sdpm_unsteady(cfg, stateNow);
 
 
     %% ----- Store selected aerodynamic quantities -----
