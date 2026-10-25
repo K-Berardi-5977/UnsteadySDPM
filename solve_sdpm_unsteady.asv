@@ -100,7 +100,7 @@ Vbody = body_velocity( ...
 %% ========================================================================
 %  6) LOAD PERSISTENT WAKE
 % =========================================================================
-wakeOld =  state.wake
+wakeOld = state.wake;
 
 % wakeCfg = cfg.wake;
 % 
@@ -171,7 +171,7 @@ inflBWnew = wake_influence(body,newWakePanel);
     phiWakeOld);
 
 muSolve = A \ b;
-
+n =  body.nPanels;
 muBody = muSolve(1:n);
 muNew  = muSolve(end);
 
@@ -229,6 +229,7 @@ state.GammaBoundPrev = aero.Gamma;
 
 state.phiPrev = phiBody;
 
+state.time = state.time + dt;
 %% ========================================================================
 %  15) PACKAGE RESULTS
 % =========================================================================
@@ -264,11 +265,9 @@ result.Vt = aero.Vt;
 result.Gamma = aero.Gamma;
 
 result.CL_gamma = aero.CL_gamma;
-
 result.CL_pressure = aero.CL_pressure;
 
 result.CD = aero.CD_pressure;
-
 result.CM = aero.CM_pressure;
 
 result.xCp = ...

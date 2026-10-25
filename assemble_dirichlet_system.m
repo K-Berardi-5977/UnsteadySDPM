@@ -1,8 +1,8 @@
-function [A, b] = assemble_dirichlet_system(inflBB, inflBW, sigma)
+function [A, b] = assemble_dirichlet_system(inflBB, inflBWnew, sigma, phiWakeOld)
 %ASSEMBLE_DIRICHLET_SYSTEM
-% Assemble the steady internal-Dirichlet source-doublet panel system:
+% Assemble the unsteady internal-Dirichlet source-doublet panel system:
 %
-%       A * mu = b
+%       A*muBody + A_new*muNew = phi_source - phiWakeOld
 %
 % INPUTS
 %   inflBB
@@ -57,6 +57,9 @@ function [A, b] = assemble_dirichlet_system(inflBB, inflBW, sigma)
 
 n = size(inflBB.A, 1);
 
+if size(inflBWnew.A,2) ~= 1
+    error('inflBWnew must describe exactly one new wake panel.')
+end
 % N body-doublet unknowns + 1 steady-wake doublet unknown
 A = zeros(n+1, n+1);
 
@@ -69,6 +72,7 @@ b = zeros(n+1, 1);
 
 % Body doublet strength mu_j acting on body collocation point i.
 A(1:n, 1:n) = inflBB.A;
+
 
 
 %% ========================================================================
@@ -87,8 +91,8 @@ A(1:n, 1:n) = inflBB.A;
 %       [sum_j A_wake,ij] * mu_wake
 %
 % so all prescribed wake-panel influences collapse into one matrix column.
-
-A(1:n, end) = sum(inflBW.A, 2);
+% New wake panel influence
+A(1:n,end) = inflBWnew.A(:,1);
 
 
 %% ========================================================================
@@ -98,8 +102,12 @@ A(1:n, end) = sum(inflBW.A, 2);
 % Source strengths are prescribed rather than solved for, so their
 % potential contribution appears on the right-hand side.
 
-b(1:n) = ...
+% Prescribed source contribution
+bSource = ...
     inflBB.SourceInfluence * sigma;
+
+% Move wake strength contributions to RHS of system
+b(1:n) = bSource - phiWakeOld;
 
 
 %% ========================================================================
