@@ -1,5 +1,5 @@
 function aero = postprocess_aero( ...
-    body, mu, sigma, inflBB, inflBW, flow, cfg)
+    body, muBody, sigma, inflBB, VtWake, flow, cfg)
 %POSTPROCESS_AERO
 % Compute surface velocity, pressure coefficient, circulation, and
 % integrated aerodynamic loads for the steady SDPM solution.
@@ -53,8 +53,10 @@ rho   = flow.rho;
 c = cfg.airfoil.chord;
 
 % Separate body and wake doublet strengths
-muBody = mu(1:n);
-muWake = mu(end);
+n = body.nPanels;
+
+muBody = muBody(:);
+VtWake = VtWake(:);
 
 
 %% ========================================================================
@@ -70,8 +72,7 @@ muWake = mu(end);
 % Summing across wake panels gives the total influence coefficient
 % corresponding to the single common wake strength.
 
-Vt_wake = ...
-    sum(inflBW.BtJ, 2) .* muWake;
+Vt_wake = VtWake;
 
 
 %% ========================================================================
@@ -95,7 +96,7 @@ Vt_source = ...
 % =========================================================================
 
 Vt_freestream = ...
-    U .* cos(body.theta - alpha);
+    U .* cos(body.theta - flow.alphaRad);
 
 
 %% ========================================================================

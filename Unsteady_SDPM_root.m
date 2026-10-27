@@ -65,8 +65,11 @@ end
 
 thetaAmp = deg2rad(5);
 
-freq = 0.05;                   % Hz
-redFreq = pi*freq;
+freq = 0.0010;                   % Hz
+omegaMotion = 2*pi*freq;
+
+redFreq = ...
+    omegaMotion * cfg.airfoil.chord / (2*cfg.flow.U);
 omegaMotion = 2*pi*freq;
 
 T = 1/freq;
@@ -100,10 +103,24 @@ bodyState.w = zeros(1,Nt);
 
 bodyState.omega = ...
     thetaAmp .* omegaMotion .* cos(omegaMotion .* t);
+%% ========================================================================
+%  4) INITIALIZE PERSISTENT AERODYNAMIC STATE
+% =========================================================================
 
+aeroState.time = 0;
+
+% Persistent wake geometry and strengths
+aeroState.wake.Bp = zeros(0,2);
+aeroState.wake.mu = zeros(0,1);
+
+% Previous bound circulation
+aeroState.GammaBoundPrev = [];
+
+% Previous body-collocation-point potential
+aeroState.phiPrev = [];
 
 %% ========================================================================
-%  4) PREALLOCATE TIME-HISTORY STORAGE
+%  5) PREALLOCATE TIME-HISTORY STORAGE
 % =========================================================================
 
 results = cell(1,Nt);
@@ -137,9 +154,12 @@ for n = 1:Nt
 
 
     %% ----- Instantaneous aerodynamic solution -----
-
-    results{n} = ...
-        solve_sdpm_unsteady(cfg, stateNow);
+    [results{n},aeroState] = ...
+        solve_sdpm_unsteady( ...
+        cfg, ...
+        stateNow, ...
+        aeroState, ...
+        dt);
 
 
     %% ----- Store selected aerodynamic quantities -----
@@ -152,6 +172,10 @@ for n = 1:Nt
 
     Gamma(n) = ...
         results{n}.Gamma;
+
+    nWakePanels(n) = ...
+        numel(results{n}.wake.mu);
+
 
 end
 %% ========================================================================
@@ -309,7 +333,7 @@ xlim(ax4,[t(1) t(end)])
 
 sgtitle( ...
     sprintf( ...
-    'NACA %s Quasi-Steady SDPM', ...
+    'NACA %s Unsteady SDPM', ...
     cfg.airfoil.code));
 
 
@@ -371,7 +395,7 @@ for n = 1:Nt
 
     sgtitle( ...
         sprintf( ...
-        ['NACA %s Quasi-Steady SDPM   |   ', ...
+        ['NACA %s Unsteady SDPM   |   ', ...
          't = %.3f s   |   \\theta = %.2f^\\circ   |   C_L = %.3f'], ...
         cfg.airfoil.code, ...
         t(n), ...
@@ -414,7 +438,7 @@ plot( ...
 xlabel('Time [s]')
 ylabel('C_L')
 
-title('Quasi-Steady Lift History')
+title('Unsteady Lift History')
 
 grid on
 
@@ -430,13 +454,13 @@ plot( ...
 xlabel('\theta [deg]')
 ylabel('C_L')
 
-title('Quasi-Steady Lift vs Pitch Angle')
+title('Unsteady Lift vs Pitch Angle')
 
 grid on
 
 
 alphaEffective = ...
-    cfg.flow.alphaDeg - rad2deg(bodyState.theta);
+    cfg.flow.alphaDeg + rad2deg(bodyState.theta);
 
 figure
 plot(t,alphaEffective)
@@ -448,5 +472,17 @@ figure
 plot(rad2deg(bodyState.theta), CL, 'LineWidth', 1.2)
 xlabel('\theta [deg]')
 ylabel('C_L')
-title(sprintf('C_l vs \\theta (\\pi f_c / U  = %3d)' , redFreq))
+title(sprintf( ...
+    'C_L vs \\theta   (k = %.3f)', ...
+    redFreq))
+grid on
+
+figure
+plot(t,nWakePanels,'LineWidth',1.2)
+
+xlabel('Time [s]')
+ylabel('Number of Wake Panels')
+
+title('Wake Growth')
+
 grid on
